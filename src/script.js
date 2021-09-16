@@ -374,10 +374,30 @@
         });
     }
 
+    function toggleDisabledButton(formValue) {
+        Object.keys(staminaCost).forEach((course) => {
+            if (formValue.gauge >= gauges[course]) {
+                $(`.subtractPromotionTimes[value="${course}"]`).prop('disabled', false);
+                $(`.subtractEventTimes[value="${course}"]`).prop('disabled', true);
+            } else {
+                $(`.subtractPromotionTimes[value="${course}"]`).prop('disabled', true);
+                $(`.subtractEventTimes[value="${course}"]`).prop('disabled', false);
+            }
+        });
+        if (formValue.gauge >= 100) {
+            $('.addPromotionTimes').prop('disabled', true);
+            $('.addEventTimes').prop('disabled', false);
+        } else {
+            $('.addPromotionTimes').prop('disabled', false);
+            $('.addEventTimes').prop('disabled', true);
+        }
+    }
+
     function calculate() {
         const formValue = getFormValue();
         calculateTargetPoint(formValue);
         calculateTail(formValue);
+        toggleDisabledButton(formValue);
         if (formValue.isAutoSave) {
             save();
         }
