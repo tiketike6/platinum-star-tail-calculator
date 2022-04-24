@@ -292,10 +292,10 @@
 
     // 計算結果の表示
     function showResultByCouse(course, formValue, minResult, minCost) {
+        const level = course.slice(0, 3);
         if (formValue.showCourse.length && formValue.showCourse.indexOf(course) === -1) {
             // 表示コースでなければ列を非表示
             $(`.${course}`).hide();
-            const level = course.slice(0, 3);
             const colspan = $(`.${level}_header`).prop('colspan');
             if (colspan > 1) {
                 $(`.${level}_header`).prop('colspan', colspan - 1);
@@ -305,6 +305,7 @@
             return;
         }
         $(`.${course}`).show();
+        $(`.${level}_header`).show();
 
         function showResultText(field, minValue, unit, isLink) {
             let text = minValue;
@@ -354,7 +355,7 @@
         }
     }
 
-    // ツアーの計算
+    // テールの計算
     function calculateTail(formValue) {
         const result = {};
         const minCost = {};
@@ -374,22 +375,49 @@
         });
     }
 
+    function save() {
+        const datetimeSave = dayjs().format('YYYY/M/D H:mm');
+
+        const saveData = {
+            datetimeStart: $('#datetimeStart').val(),
+            datetimeEnd: $('#datetimeEnd').val(),
+            targetEnd: $('#targetEnd').val(),
+            stamina: $('#stamina').val(),
+            ownPoints: $('#ownPoints').val(),
+            gauge: $('#gauge').val(),
+            mission: $('#mission').val(),
+            showCourse: $('[name="showCourse"]:checked')
+                .map((i) => {
+                    return $('[name="showCourse"]:checked').eq(i).val();
+                })
+                .get(),
+            autoSave: $('#autoSave').prop('checked'),
+            datetimeSave: datetimeSave,
+        };
+
+        localStorage.setItem(location.href.replace('index.html', ''), JSON.stringify(saveData));
+
+        $('#datetimeSave').text(datetimeSave);
+        $('#loadSave').prop('disabled', false);
+        $('#clearSave').prop('disabled', false);
+    }
+
     function toggleDisabledButton(formValue) {
         Object.keys(staminaCost).forEach((course) => {
             if (formValue.gauge >= gauges[course]) {
-                $(`.subtractPromotionTimes[value="${course}"]`).prop('disabled', false);
-                $(`.subtractEventTimes[value="${course}"]`).prop('disabled', true);
+                $(`.beforePlayPromotion[value="${course}"]`).prop('disabled', false);
+                $(`.beforePlayEvent[value="${course}"]`).prop('disabled', true);
             } else {
-                $(`.subtractPromotionTimes[value="${course}"]`).prop('disabled', true);
-                $(`.subtractEventTimes[value="${course}"]`).prop('disabled', false);
+                $(`.beforePlayPromotion[value="${course}"]`).prop('disabled', true);
+                $(`.beforePlayEvent[value="${course}"]`).prop('disabled', false);
             }
         });
         if (formValue.gauge >= 100) {
-            $('.addPromotionTimes').prop('disabled', true);
-            $('.addEventTimes').prop('disabled', false);
+            $('.afterPlayPromotion').prop('disabled', true);
+            $('.afterPlayEvent').prop('disabled', false);
         } else {
-            $('.addPromotionTimes').prop('disabled', false);
-            $('.addEventTimes').prop('disabled', true);
+            $('.afterPlayPromotion').prop('disabled', false);
+            $('.afterPlayEvent').prop('disabled', true);
         }
     }
 
@@ -430,7 +458,7 @@
     $('#update').click(calculate);
 
     // 回数増減ボタン
-    $('.subtractPromotionTimes').click(function () {
+    $('.beforePlayPromotion').click(function () {
         // eslint-disable-next-line no-invalid-this
         const course = $(this).val();
         const formValue = getFormValue();
@@ -445,7 +473,7 @@
 
         calculate();
     });
-    $('.addPromotionTimes').click(function () {
+    $('.afterPlayPromotion').click(function () {
         // eslint-disable-next-line no-invalid-this
         const course = $(this).val();
         const formValue = getFormValue();
@@ -460,7 +488,7 @@
 
         calculate();
     });
-    $('.subtractEventTimes').click(() => {
+    $('.beforePlayEvent').click(() => {
         // eslint-disable-next-line no-invalid-this
         const formValue = getFormValue();
 
@@ -471,7 +499,7 @@
 
         calculate();
     });
-    $('.addEventTimes').click(() => {
+    $('.afterPlayEvent').click(() => {
         // eslint-disable-next-line no-invalid-this
         const formValue = getFormValue();
 
@@ -484,32 +512,6 @@
     });
 
     // 保存ボタン
-    function save() {
-        const datetimeSave = dayjs().format('YYYY/M/D H:mm');
-
-        const saveData = {
-            datetimeStart: $('#datetimeStart').val(),
-            datetimeEnd: $('#datetimeEnd').val(),
-            targetEnd: $('#targetEnd').val(),
-            stamina: $('#stamina').val(),
-            ownPoints: $('#ownPoints').val(),
-            gauge: $('#gauge').val(),
-            mission: $('#mission').val(),
-            showCourse: $('[name="showCourse"]:checked')
-                .map((i) => {
-                    return $('[name="showCourse"]:checked').eq(i).val();
-                })
-                .get(),
-            autoSave: $('#autoSave').prop('checked'),
-            datetimeSave: datetimeSave,
-        };
-
-        localStorage.setItem(location.href.replace('index.html', ''), JSON.stringify(saveData));
-
-        $('#datetimeSave').text(datetimeSave);
-        $('#loadSave').prop('disabled', false);
-        $('#clearSave').prop('disabled', false);
-    }
     $('#save').click(save);
 
     // 入力を初期化ボタン
