@@ -93,6 +93,10 @@
         const formValue = {};
         const errors = [];
 
+        if ($('#isNow').prop('checked')) {
+            $('#datetimeNow').val(dayjs().format('YYYY-MM-DDTHH:mm'));
+        }
+
         function validDateTime(field) {
             const inputValue = $(`#${field}`).val();
             if (!inputValue) {
@@ -112,8 +116,17 @@
         }
         validDateTime('datetimeStart');
         validDateTime('datetimeEnd');
+        validDateTime('datetimeNow');
 
-        formValue.endOfTodayUnix = dayjs().endOf('d').unix();
+        if (formValue.datetimeNowUnix < formValue.datetimeStartUnix) {
+            formValue.datetimeNowUnix = formValue.datetimeStartUnix;
+            formValue.isFuture = true;
+        }
+        if (formValue.datetimeNowUnix > formValue.datetimeEndUnix) {
+            formValue.datetimeNowUnix = formValue.datetimeEndUnix;
+        }
+
+        formValue.endOfTodayUnix = dayjs(formValue.datetimeNow).endOf('d').unix();
         if (formValue.endOfTodayUnix < formValue.datetimeStartUnix) {
             formValue.endOfTodayUnix = formValue.datetimeStartUnix;
         }
@@ -121,16 +134,7 @@
             formValue.endOfTodayUnix = formValue.datetimeEndUnix;
         }
 
-        formValue.nowUnix = dayjs().endOf('m').unix();
-        if (formValue.nowUnix < formValue.datetimeStartUnix) {
-            formValue.nowUnix = formValue.datetimeStartUnix;
-            formValue.isFuture = true;
-        }
-        if (formValue.nowUnix > formValue.datetimeEndUnix) {
-            formValue.nowUnix = formValue.datetimeEndUnix;
-        }
-
-        function validNumber(field) {
+        function validSafeInteger(field) {
             const inputValue = $(`#${field}`).val();
             if (!inputValue) {
                 errors.push({
@@ -146,11 +150,11 @@
                 formValue[field] = Number(inputValue);
             }
         }
-        validNumber('targetEnd');
-        validNumber('stamina');
-        validNumber('ownPoints');
-        validNumber('gauge');
-        validNumber('mission');
+        validSafeInteger('targetEnd');
+        validSafeInteger('stamina');
+        validSafeInteger('myPoint');
+        validSafeInteger('gauge');
+        validSafeInteger('mission');
 
         formValue.showCourse = $('[name="showCourse"]:checked')
             .map((i) => {
@@ -171,30 +175,31 @@
 
     // 目標ポイントを計算
     function calculateTargetPoint(formValue) {
-        let diffEnd = formValue.targetEnd - formValue.ownPoints;
+        let diffEnd = formValue.targetEnd - formValue.myPoint;
         if (diffEnd < 0) {
             diffEnd = 0;
         }
         $('#diffEnd').text(`(あと ${diffEnd.toLocaleString()} pt)`);
 
-        $('#labelToday').text(`${dayjs.unix(formValue.endOfTodayUnix).format('M/D')}の目標pt`);
+        $('#labelToday').text(`【${dayjs.unix(formValue.endOfTodayUnix).format('M/D')}の目標】`);
 
         const targetToday = Math.round(
             (formValue.targetEnd * (formValue.endOfTodayUnix - formValue.datetimeStartUnix)) /
                 (formValue.datetimeEndUnix - formValue.datetimeStartUnix)
         );
-        let diffToday = targetToday - formValue.ownPoints;
+        let diffToday = targetToday - formValue.myPoint;
         if (diffToday < 0) {
             diffToday = 0;
         }
         $('#targetToday').text(`${targetToday.toLocaleString()} pt (あと ${diffToday.toLocaleString()} pt)`);
 
-        $('#labelNow').text(`${dayjs.unix(formValue.nowUnix).format('M/D H:mm')}の目標pt`);
+        $('#labelNow').text(`【${dayjs.unix(formValue.datetimeNowUnix).format('M/D H:mm')}の目標】`);
 
         const targetNow = Math.round(
-            (formValue.targetEnd * (formValue.nowUnix - formValue.datetimeStartUnix)) / (formValue.datetimeEndUnix - formValue.datetimeStartUnix)
+            (formValue.targetEnd * (formValue.datetimeNowUnix - formValue.datetimeStartUnix)) /
+                (formValue.datetimeEndUnix - formValue.datetimeStartUnix)
         );
-        let diffNow = targetNow - formValue.ownPoints;
+        let diffNow = targetNow - formValue.myPoint;
         if (diffNow < 0) {
             diffNow = 0;
         }
@@ -209,42 +214,43 @@
         }
 
         const isWork = course.indexOf('work') !== -1;
+
         let gauge = formValue.gauge;
 
         let promotionTimes = 0;
-        let promotionEarnedPoints = 0;
+        let promotionEarnedPoint = 0;
 
         let eventStageTimes = 0;
-        let eventEarnedPoints = 0;
+        let eventEarnedPoint = 0;
 
         let eventLiveTimes = 0;
         let consumedStamina = 0;
 
         // プロモーション回数、イベントステージ回数を計算
-        while (formValue.targetEnd > formValue.ownPoints + promotionEarnedPoints + eventEarnedPoints || formValue.mission > eventLiveTimes) {
+        while (formValue.targetEnd > formValue.myPoint + promotionEarnedPoint + eventEarnedPoint || formValue.mission > eventLiveTimes) {
             // 累積ptが最終目標pt未満、イベント楽曲回数がミッション未満なら繰り返し
             if (gauge >= 100) {
                 // ゲージが100%以上ならイベントステージ
+                gauge -= 100;
                 eventStageTimes++;
                 eventLiveTimes++;
-                gauge -= 100;
-                eventEarnedPoints += eventPoints;
+                eventEarnedPoint += eventPoints;
                 consumedStamina += eventStaminaCost;
             } else {
                 // ゲージが100%未満ならプロモーション
-                promotionTimes++;
                 gauge += gauges[course];
-                promotionEarnedPoints += points[course];
-                consumedStamina += staminaCost[course];
+                promotionTimes++;
                 if (!isWork) {
                     eventLiveTimes++;
                 }
+                promotionEarnedPoint += points[course];
+                consumedStamina += staminaCost[course];
             }
         }
 
         // 自然回復日時の計算
         const naturalRecoveryUnix = dayjs
-            .unix(formValue.nowUnix)
+            .unix(formValue.datetimeNowUnix)
             .add((consumedStamina - formValue.stamina) * 5, 'm')
             .unix();
 
@@ -261,10 +267,10 @@
         result[course] = {};
 
         result[course].promotionTimes = promotionTimes;
-        result[course].promotionEarnedPoints = promotionEarnedPoints;
+        result[course].promotionEarnedPoint = promotionEarnedPoint;
 
         result[course].eventTimes = eventStageTimes;
-        result[course].eventEarnedPoints = eventEarnedPoints;
+        result[course].eventEarnedPoint = eventEarnedPoint;
 
         result[course].consumedStamina = consumedStamina;
         result[course].naturalRecoveryUnix = naturalRecoveryUnix;
@@ -281,9 +287,12 @@
             result[course].requiredTime += '0分';
         }
 
-        // 消費元気、所要時間の最小値を格納
+        // 消費元気、要回復元気、所要時間の最小値を格納
         if (minCost.consumedStamina === undefined || minCost.consumedStamina > consumedStamina) {
             minCost.consumedStamina = consumedStamina;
+        }
+        if (minCost.requiredRecoveryStamina === undefined || minCost.requiredRecoveryStamina > requiredRecoveryStamina) {
+            minCost.requiredRecoveryStamina = requiredRecoveryStamina;
         }
         if (minCost.requiredMinutes === undefined || minCost.requiredMinutes > requiredMinutes) {
             minCost.requiredMinutes = requiredMinutes;
@@ -312,7 +321,7 @@
             if (isLink) {
                 text = `<a href="../event-jewels-calculator/index.html?datetimeStart=${formValue.datetimeStart}&datetimeEnd=${
                     formValue.datetimeEnd
-                }&consumedStamina=${minResult[course].consumedStamina}&stamina=${formValue.stamina}">${minValue.toLocaleString()}</a>`;
+                }&consumedStamina=${minValue}&stamina=${formValue.stamina}">${minValue.toLocaleString()}</a>`;
             }
             if (unit) {
                 text += ` ${unit}`;
@@ -320,21 +329,26 @@
             $(`#${field}${course}`).html(text);
         }
         showResultText('promotionTimes', minResult[course].promotionTimes.toLocaleString());
-        showResultText('promotionEarnedPoints', minResult[course].promotionEarnedPoints.toLocaleString(), 'pt');
+        showResultText('promotionEarnedPoint', minResult[course].promotionEarnedPoint.toLocaleString(), 'pt');
 
         showResultText('eventTimes', minResult[course].eventTimes.toLocaleString());
-        showResultText('eventEarnedPoints', minResult[course].eventEarnedPoints.toLocaleString(), 'pt');
+        showResultText('eventEarnedPoint', minResult[course].eventEarnedPoint.toLocaleString(), 'pt');
 
-        showResultText('consumedStamina', minResult[course].consumedStamina.toLocaleString());
+        showResultText('consumedStamina', minResult[course].consumedStamina, false, true);
         showResultText('naturalRecoveryAt', dayjs.unix(minResult[course].naturalRecoveryUnix).format('M/D H:mm'));
-        showResultText('requiredRecoveryStamina', minResult[course].requiredRecoveryStamina, false, true);
+        showResultText('requiredRecoveryStamina', minResult[course].requiredRecoveryStamina.toLocaleString());
         showResultText('requiredTime', minResult[course].requiredTime);
 
-        // 消費元気、所要時間の最小値は青文字
+        // 消費元気、要回復元気、所要時間の最小値は青文字
         if (formValue.showCourse.length !== 1 && minResult[course].consumedStamina === minCost.consumedStamina) {
             $(`#consumedStamina${course}`).addClass('info');
         } else {
             $(`#consumedStamina${course}`).removeClass('info');
+        }
+        if (formValue.showCourse.length !== 1 && minResult[course].requiredRecoveryStamina === minCost.requiredRecoveryStamina) {
+            $(`#requiredRecoveryStamina${course}`).addClass('info');
+        } else {
+            $(`#requiredRecoveryStamina${course}`).removeClass('info');
         }
         if (formValue.showCourse.length !== 1 && minResult[course].requiredMinutes === minCost.requiredMinutes) {
             $(`#requiredTime${course}`).addClass('info');
@@ -348,7 +362,7 @@
         } else {
             $(`#naturalRecoveryAt${course}`).removeClass('danger');
         }
-        if (dayjs.unix(formValue.nowUnix).add(minResult[course].requiredMinutes, 'm').unix() > formValue.datetimeEndUnix) {
+        if (dayjs.unix(formValue.datetimeNowUnix).add(minResult[course].requiredMinutes, 'm').unix() > formValue.datetimeEndUnix) {
             $(`#requiredTime${course}`).addClass('danger');
         } else {
             $(`#requiredTime${course}`).removeClass('danger');
@@ -381,9 +395,11 @@
         const saveData = {
             datetimeStart: $('#datetimeStart').val(),
             datetimeEnd: $('#datetimeEnd').val(),
+            datetimeNow: $('#datetimeNow').val(),
+            isNow: $('#isNow').prop('checked'),
             targetEnd: $('#targetEnd').val(),
             stamina: $('#stamina').val(),
-            ownPoints: $('#ownPoints').val(),
+            myPoint: $('#myPoint').val(),
             gauge: $('#gauge').val(),
             mission: $('#mission').val(),
             showCourse: $('[name="showCourse"]:checked')
@@ -434,9 +450,17 @@
     // input要素の変更時
     $('#datetimeStart').change(calculate);
     $('#datetimeEnd').change(calculate);
+    $('#datetimeNow').change(() => {
+        $('#isNow').prop('checked', true);
+        if ($('#datetimeNow').val() !== dayjs().format('YYYY-MM-DDTHH:mm')) {
+            $('#isNow').prop('checked', false);
+        }
+        calculate();
+    });
+    $('#isNow').change(calculate);
     $('#targetEnd').change(calculate);
     $('#stamina').change(calculate);
-    $('#ownPoints').change(calculate);
+    $('#myPoint').change(calculate);
     $('#gauge').change(calculate);
     $('#mission').change(calculate);
     $('[name="showCourse"]').change(() => {
@@ -454,8 +478,8 @@
         });
         calculate();
     });
-    $('#autoSave').change(calculate);
     $('#update').click(calculate);
+    $('#autoSave').change(calculate);
 
     // 回数増減ボタン
     $('.beforePlayPromotion').click(function () {
@@ -465,7 +489,7 @@
         const isWork = course.indexOf('work') !== -1;
 
         $('#stamina').val(formValue.stamina + staminaCost[course]);
-        $('#ownPoints').val(formValue.ownPoints - points[course]);
+        $('#myPoint').val(formValue.myPoint - points[course]);
         $('#gauge').val(formValue.gauge - gauges[course]);
         if (!isWork) {
             $('#mission').val(formValue.mission + 1);
@@ -480,7 +504,7 @@
         const isWork = course.indexOf('work') !== -1;
 
         $('#stamina').val(formValue.stamina - staminaCost[course]);
-        $('#ownPoints').val(formValue.ownPoints + points[course]);
+        $('#myPoint').val(formValue.myPoint + points[course]);
         $('#gauge').val(formValue.gauge + gauges[course]);
         if (!isWork) {
             $('#mission').val(formValue.mission - 1);
@@ -493,7 +517,7 @@
         const formValue = getFormValue();
 
         $('#stamina').val(formValue.stamina + eventStaminaCost);
-        $('#ownPoints').val(formValue.ownPoints - eventPoints);
+        $('#myPoint').val(formValue.myPoint - eventPoints);
         $('#gauge').val(formValue.gauge + 100);
         $('#mission').val(formValue.mission + 1);
 
@@ -504,7 +528,7 @@
         const formValue = getFormValue();
 
         $('#stamina').val(formValue.stamina - eventStaminaCost);
-        $('#ownPoints').val(formValue.ownPoints + eventPoints);
+        $('#myPoint').val(formValue.myPoint + eventPoints);
         $('#gauge').val(formValue.gauge - 100);
         $('#mission').val(formValue.mission - 1);
 
@@ -518,9 +542,11 @@
     function defaultInput() {
         $('#datetimeStart').val(dayjs().subtract(15, 'h').format('YYYY-MM-DDT15:00'));
         $('#datetimeEnd').val(dayjs().subtract(15, 'h').add(1, 'w').format('YYYY-MM-DDT20:59'));
+        $('#datetimeNow').val(dayjs().format('YYYY-MM-DDTHH:mm'));
+        $('#isNow').prop('checked', true);
         $('#targetEnd').val(30000);
         $('#stamina').val(0);
-        $('#ownPoints').val(0);
+        $('#myPoint').val(0);
         $('#gauge').val(0);
         $('#mission').val(30);
         $('[name="showCourse"]').each((i) => {
@@ -553,9 +579,11 @@
 
         $('#datetimeStart').val(savedData.datetimeStart);
         $('#datetimeEnd').val(savedData.datetimeEnd);
+        $('#datetimeNow').val(savedData.datetimeNow);
+        $('#isNow').prop('checked', savedData.isNow);
         $('#targetEnd').val(savedData.targetEnd);
         $('#stamina').val(savedData.stamina);
-        $('#ownPoints').val(savedData.ownPoints);
+        $('#myPoint').val(savedData.myPoint);
         $('#gauge').val(savedData.gauge);
         $('#mission').val(savedData.mission);
         $('#showCourse-all').prop('checked', true);
